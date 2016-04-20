@@ -7,12 +7,27 @@ public class Klotski {
 
     private final Set<String> visited = new HashSet<>();
 
-    private final Set<Character> pieces = new HashSet<>();
+    private final char[] pieces;
 
     private final String initPosition;
 
+    private final Queue<Node> nodeQueue = new ArrayDeque<>();
+
     public Klotski(String initPosition) {
         this.initPosition = initPosition;
+        Set<Character> temp = new HashSet<>();
+        for (int i = 0; i < initPosition.length(); i++) {
+            char ch = initPosition.charAt(i);
+            if (ch != '.' && ch != ' ' && ch != '\n') {
+                temp.add(ch);
+            }
+        }
+        pieces = new char[temp.size()];
+
+        int i = 0;
+        for (char ch : temp) {
+            pieces[i++] = ch;
+        }
     }
 
     public static class MoveTuple {
@@ -25,9 +40,9 @@ public class Klotski {
         }
     }
 
-    private List<MoveTuple> generateMoves1(String position, Character rejCh) {
+    private List<MoveTuple> generateMoves1(String position, char rejCh) {
         List<MoveTuple> moves = new ArrayList<>();
-        for (Character ch : pieces) {
+        for (char ch : pieces) {
             if (ch != rejCh) {
                 moves.addAll(generateMoves2(position, ch));
             }
@@ -40,13 +55,13 @@ public class Klotski {
         int[] options = { -5, -1, +1, +5};
         for (int opt : options) {
             boolean valid = true;
-            for (int i = 0; i < position.length(); i++) {
+            for (int i = 0, j = opt; i < position.length(); i++, j++) {
                 if (position.charAt(i) == ch) {
-                    if (i + opt < 0 || i + opt >= position.length()) {
+                    if (j < 0 || j >= position.length()) {
                         valid = false;
                         break;
                     }
-                    char target = position.charAt(i + opt);
+                    char target = position.charAt(j);
                     if (target != ch && target != ' ') {
                         valid = false;
                         break;
@@ -70,7 +85,7 @@ public class Klotski {
         }
     }
 
-    private List<Move> generateMoves(String position, Character rejCh) {
+    private List<Move> generateMoves(String position, char rejCh) {
         List<MoveTuple> moves = generateMoves1(position, rejCh);
         List<Move> finalPositions = new ArrayList<>();
         for (MoveTuple moveTuple : moves) {
@@ -86,90 +101,69 @@ public class Klotski {
     }
 
     private String computeMove(String position, int opt, char ch) {
-        String out = "";
+        StringBuilder out = new StringBuilder();
         for (int i = 0; i < position.length(); i++) {
             char current = position.charAt(i);
             int j = i - opt;
             if (j >=0 && j < position.length()) {
                 char source = position.charAt(j);
                 if (source == ch) {
-                    out += source;
+                    out.append(source);
                 } else if (current == ch) {
-                    out += ' ';
+                    out.append(' ');
                 } else {
-                    out += current;
+                    out.append(current);
                 }
             } else {
                 if (current == ch) {
-                    out += ' ';
+                    out.append(' ');
                 } else {
-                    out += current;
+                    out.append(current);
                 }
             }
         }
-        return out;
+        return out.toString();
     }
 
-    private int lowerBound(String position) {
+    private boolean accepted(String position) {
         int n = position.indexOf('#');
-        int nr = n / 5;
-        int nc = n % 5;
-        return Math.abs(nr - 3) + Math.abs(nc - 1);
+        return n == 16;
     }
 
-    private static class Choice implements Comparable<Choice> {
-        int height;
-        int lowerBound;
+    private static class Node {
         Move move;
-        Choice parent;
+        Node parent;
 
-        public Choice(int height, int lowerBound, Move move, Choice parent) {
-            this.height = height;
-            this.lowerBound = lowerBound;
+        public Node(Move move, Node parent) {
             this.move = move;
             this.parent = parent;
-        }
-
-        @Override
-        public int compareTo(Choice o) {
-            return Integer.compare(lowerBound + height, o.lowerBound + o.height);
         }
     }
 
     private boolean solve() {
-        for (int i = 0; i < initPosition.length(); i++) {
-            char ch = initPosition.charAt(i);
-            if (ch != '.' && ch != ' ' && ch != '\n') {
-                pieces.add(ch);
-            }
-        }
 
-        Queue<Choice> topChoices = new ArrayDeque<>();
-        topChoices.add(new Choice(0, lowerBound(initPosition), new Move('\0', initPosition), null));
+        Node SENTINEL = new Node(null, null);
 
-        int bestScore = Integer.MAX_VALUE;
+        nodeQueue.add(new Node(new Move('\0', initPosition), null));
+        nodeQueue.add(SENTINEL);
 
         int progress = 0;
-        while (!topChoices.isEmpty()) {
-            Choice choice = topChoices.poll();
-            Move lastMove = choice.move;
-            int height = choice.height;
-            int lowerBound = choice.lowerBound;
+        while (!nodeQueue.isEmpty()) {
+            Node node = nodeQueue.poll();
+            if (node == SENTINEL) {
+                progress++;
+                System.out.println("Progress: " + progress);
+                nodeQueue.add(SENTINEL);
+                continue;
+            }
+            Move lastMove = node.move;
             String position = lastMove.position;
 
-            if (choice.height > progress) {
-                progress = choice.height;
-                System.out.println("Progress: " + progress);
-            }
-            if (lowerBound == 0) {
-                int score = lowerBound + height;
-                if (score < bestScore) {
-                    bestScore = score;
-                    System.out.println("------- START ---- SCORE: " + bestScore);
-                    printSolution(choice);
-                    System.out.println("------- END   ---- SCORE: " + bestScore);
-                    return true;
-                }
+            if (accepted(position)) {
+                System.out.println("------- START ---- SCORE: " + progress);
+                printSolution(node);
+                System.out.println("------- END   ---- SCORE: " + progress);
+                return true;
             }
             List<Move> moves = generateMoves(position, lastMove.ch);
 
@@ -178,20 +172,19 @@ public class Klotski {
                     continue;
                 }
                 visited.add(move.position);
-                int nextHeight = height + 1;
-                int nextLowerBound = lowerBound(move.position);
-                topChoices.add(new Choice(nextHeight, nextLowerBound, move, choice));
+                Node nextNode = new Node(move, node);
+                nodeQueue.add(nextNode);
             }
         }
-        System.out.println(topChoices.size());
+        System.out.println(nodeQueue.size());
         return false;
     }
 
-    private void printSolution(Choice choice) {
+    private void printSolution(Node node) {
         List<String> seq = new ArrayList<>();
-        while (choice != null) {
-            seq.add(choice.move.position);
-            choice = choice.parent;
+        while (node != null) {
+            seq.add(node.move.position);
+            node = node.parent;
         }
         for (int a = seq.size() - 1; a >= 0; a--) {
             System.out.println(seq.get(a));
