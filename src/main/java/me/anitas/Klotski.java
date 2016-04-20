@@ -8,6 +8,7 @@ public class Klotski {
 
     private final Set<Character> pieces = new HashSet<>();
     private final List<String> bfsQueue = new ArrayList<>();
+    private final List<MoveTuple> bfsMoveTuple = new ArrayList<>();
     private final List<Integer> bfsParent = new ArrayList<>();
 
     private final String initPosition;
@@ -29,26 +30,32 @@ public class Klotski {
     private List<MoveTuple> generateMoves1(String position) {
         // TODO(anita): Add local introspection.
         List<MoveTuple> moves = new ArrayList<>();
-        int[] options = { -5, -1, +1, +5};
         for (Character ch : pieces) {
-            for (int opt : options) {
-                boolean valid = true;
-                for (int i = 0; i < position.length(); i++) {
-                    if (position.charAt(i) == ch) {
-                        if (i + opt < 0 || i + opt >= position.length()) {
-                            valid = false;
-                            break;
-                        }
-                        char target = position.charAt(i + opt);
-                        if (target != ch && target != ' ') {
-                            valid = false;
-                            break;
-                        }
+            moves.addAll(generateMoves2(position, ch));
+        }
+        return moves;
+    }
+
+    private List<MoveTuple> generateMoves2(String position, char ch) {
+        List<MoveTuple> moves = new ArrayList<>();
+        int[] options = { -5, -1, +1, +5};
+        for (int opt : options) {
+            boolean valid = true;
+            for (int i = 0; i < position.length(); i++) {
+                if (position.charAt(i) == ch) {
+                    if (i + opt < 0 || i + opt >= position.length()) {
+                        valid = false;
+                        break;
+                    }
+                    char target = position.charAt(i + opt);
+                    if (target != ch && target != ' ') {
+                        valid = false;
+                        break;
                     }
                 }
-                if (valid) {
-                    moves.add(new MoveTuple(opt, ch));
-                }
+            }
+            if (valid) {
+                moves.add(new MoveTuple(opt, ch));
             }
         }
         return moves;
@@ -60,12 +67,10 @@ public class Klotski {
         for (MoveTuple moveTuple : moves) {
             String nextPosition = computeMove(position, moveTuple.opt, moveTuple.ch);
             finalPositions.add(nextPosition);
-            List<MoveTuple> secondMoves = generateMoves1(nextPosition);
-            for (MoveTuple second : secondMoves) {
-                if (second.ch == moveTuple.ch) {
-                    finalPositions.add(computeMove(nextPosition, second.opt, second.ch));
-                }
-            }
+//            List<MoveTuple> secondMoves = generateMoves2(nextPosition, moveTuple.ch);
+//            for (MoveTuple second : secondMoves) {
+//                finalPositions.add(computeMove(nextPosition, second.opt, second.ch));
+//            }
         }
         return finalPositions;
     }
@@ -106,11 +111,13 @@ public class Klotski {
         int bfsId;
         int height;
         int lowerBound;
+        MoveTuple moveTuple;
 
-        public Choice(int bfsId, int height, int lowerBound) {
+        public Choice(int bfsId, int height, int lowerBound, MoveTuple moveTuple) {
             this.bfsId = bfsId;
             this.height = height;
             this.lowerBound = lowerBound;
+            this.moveTuple = moveTuple;
         }
 
         @Override
@@ -131,12 +138,13 @@ public class Klotski {
         bfsParent.add(-1);
 
         PriorityQueue<Choice> topChoices = new PriorityQueue<>();
-        topChoices.add(new Choice(0, 0, lowerBound(initPosition)));
+        topChoices.add(new Choice(0, 0, lowerBound(initPosition), null));
 
         int bestScore = Integer.MAX_VALUE;
 
         while (!topChoices.isEmpty()) {
             Choice choice = topChoices.poll();
+            MoveTuple lastTuple = choice.moveTuple;
             int bfsIt = choice.bfsId;
             int height = choice.height;
             int lowerBound = choice.lowerBound;
@@ -157,13 +165,25 @@ public class Klotski {
                 }
             }
 
-            List<String> moves = generateMoves(position);
+            if (height > 50) {
+                continue;
+            }
 
-            for (String move : moves) {
+            List<MoveTuple> moves = generateMoves1(position);
+
+            for (MoveTuple moveTuple : moves) {
+                String move = computeMove(position, moveTuple.opt, moveTuple.ch);
                 bfsQueue.add(move);
                 bfsParent.add(bfsIt);
                 if (!visited.contains(move)) {
-                    topChoices.add(new Choice(bfsQueue.size() - 1, height + 1, lowerBound(move)));
+                    int newHeight;
+                    if (lastTuple != null && lastTuple.ch == moveTuple.ch) {
+                        newHeight = height;
+                    } else {
+                        newHeight = height + 1;
+                    }
+
+                    topChoices.add(new Choice(bfsQueue.size() - 1, newHeight, lowerBound(move), moveTuple));
                 }
             }
         }
