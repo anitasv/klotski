@@ -204,7 +204,7 @@ public class Klotski {
                 "1##2\n" +
                 "3445\n" +
                 "3675\n" +
-                " 8 9\n";
+                "8  9\n";
 
         String position120 =
                 "1##2\n" +
@@ -214,7 +214,7 @@ public class Klotski {
                 " 99 \n";
 
         long startTime = System.nanoTime();
-        System.out.println(new Klotski(position120).solve());
+        System.out.println(new Klotski(positionForgetMeNot).solve());
         long endTime = System.nanoTime();
         System.out.println(TimeUnit.NANOSECONDS.toMillis(endTime - startTime));
     }
