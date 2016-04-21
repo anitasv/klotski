@@ -1,17 +1,19 @@
 package me.anitas;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Klotski {
 
-    private final Set<String> visited = new HashSet<>();
+    private final Set<String> visited = new ConcurrentSkipListSet<>();
 
     private final char[] pieces;
 
     private final String initPosition;
 
-    private final Queue<Node> nodeQueue = new ArrayDeque<>();
+    private final BlockingQueue<Node> nodeQueue = new ArrayBlockingQueue<>(400000);
 
     public Klotski(String initPosition) {
         this.initPosition = initPosition;
@@ -140,7 +142,7 @@ public class Klotski {
         }
     }
 
-    private boolean solve() {
+    private boolean solve() throws InterruptedException {
 
         Node SENTINEL = new Node(null, null);
 
@@ -148,36 +150,40 @@ public class Klotski {
         nodeQueue.add(SENTINEL);
 
         int progress = 0;
-        while (!nodeQueue.isEmpty()) {
-            Node node = nodeQueue.poll();
+        ForkJoinPool fjp = ForkJoinPool.commonPool();
+
+        DynCountDownLatch cdLatch = new DynCountDownLatch();
+        while (true) {
+            Node node = nodeQueue.take();
             if (node == SENTINEL) {
+                cdLatch.await();
                 progress++;
                 System.out.println("Progress: " + progress);
                 nodeQueue.add(SENTINEL);
                 continue;
             }
+
             Move lastMove = node.move;
             String position = lastMove.position;
 
             if (accepted(position)) {
-                System.out.println("------- START ---- SCORE: " + progress);
                 printSolution(node);
-                System.out.println("------- END   ---- SCORE: " + progress);
                 return true;
             }
-            List<Move> moves = generateMoves(position, lastMove.ch);
 
-            for (Move move : moves) {
-                if (visited.contains(move.position)) {
-                    continue;
+            cdLatch.register();
+            fjp.execute(() -> {
+                List<Move> moves = generateMoves(position, lastMove.ch);
+
+                for (Move move : moves) {
+                    if (visited.add(move.position)) {
+                        Node nextNode = new Node(move, node);
+                        nodeQueue.add(nextNode);
+                    }
                 }
-                visited.add(move.position);
-                Node nextNode = new Node(move, node);
-                nodeQueue.add(nextNode);
-            }
+                cdLatch.countDown();
+            });
         }
-        System.out.println(nodeQueue.size());
-        return false;
     }
 
     private void printSolution(Node node) {
@@ -191,7 +197,7 @@ public class Klotski {
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         String positionForgetMeNot =
                 "1##2\n" +
                 "1##2\n" +
