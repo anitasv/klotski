@@ -16,7 +16,6 @@ public class DynCountDownLatch  {
     public void countDown() {
         int c = internal.decrementAndGet();
         if (c == 0) {
-            System.out.println("Release");
             semaphore.release();
         }
     }
