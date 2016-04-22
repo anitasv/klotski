@@ -22,14 +22,14 @@ public class DynCountDownLatch  {
     private final Condition condition = lock.newCondition();
 
     public void register() {
+        lock.lock();
         internal.incrementAndGet();
+        lock.unlock();
     }
 
     public void countDown() {
-        int c = internal.decrementAndGet();
-
         lock.lock();
-        if (c == 0) {
+        if (internal.decrementAndGet() == 0) {
             condition.signal();
         }
         lock.unlock();
